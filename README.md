@@ -27,7 +27,7 @@ A Chrome browser extension that simulates natural human typing in Google Docs, h
 
 1. **Clone or download this repository**
    ```bash
-   git clone https://github.com/yourusername/essay_injector.git
+   git clone https://github.com/jakobpl/essay_injector.git
    ```
 
 2. **Open Chrome and navigate to extensions page**
