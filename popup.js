@@ -27,6 +27,8 @@ essayInput.addEventListener('input', () => {
 startBtn.addEventListener('click', async () => {
     const essay = essayInput.value.trim();
     
+    console.log('Start button clicked, essay length:', essay.length);
+    
     if (!essay) {
         showError('Please paste your essay first.');
         return;
@@ -35,6 +37,8 @@ startBtn.addEventListener('click', async () => {
     try {
         // Get active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        console.log('Active tab:', tab.url);
         
         if (!tab.url || !tab.url.includes('docs.google.com')) {
             showError('Please open a Google Docs document first.');
@@ -53,12 +57,21 @@ startBtn.addEventListener('click', async () => {
         progressInfo.textContent = `0 / ${essay.length} characters`;
         
         // Send message to content script
+        console.log('Sending message to tab:', tab.id);
         chrome.tabs.sendMessage(tab.id, {
             action: 'startTyping',
             essay: essay
+        }, (response) => {
+            console.log('Response from content script:', response);
+            if (chrome.runtime.lastError) {
+                console.error('Error sending message:', chrome.runtime.lastError);
+                showError('Could not connect to page. Try refreshing the Google Docs page.');
+                resetUI();
+            }
         });
         
     } catch (error) {
+        console.error('Error in startBtn click handler:', error);
         showError('Error: ' + error.message);
         resetUI();
     }

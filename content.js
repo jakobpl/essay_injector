@@ -1,5 +1,7 @@
 // Content script for Essay Injector - simulates typing in Google Docs
 
+console.log('Essay Injector content script loaded on:', window.location.href);
+
 let isTyping = false;
 let shouldStop = false;
 
@@ -24,15 +26,19 @@ const typos = {
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('Content script received message:', message.action);
     if (message.action === 'startTyping') {
         startTyping(message.essay);
     } else if (message.action === 'stopTyping') {
         shouldStop = true;
         isTyping = false;
     }
+    sendResponse({ received: true });
+    return true; // Keep the message channel open
 });
 
 async function startTyping(essay) {
+    console.log('Starting typing, essay length:', essay.length);
     if (isTyping) return;
     
     isTyping = true;
@@ -41,6 +47,8 @@ async function startTyping(essay) {
     try {
         // Find Google Docs editor
         const editor = findGoogleDocsEditor();
+        console.log('Found editor:', editor);
+        
         if (!editor) {
             sendError('Could not find Google Docs editor. Please click in the document first.');
             return;
@@ -48,6 +56,7 @@ async function startTyping(essay) {
         
         // Focus the editor
         editor.focus();
+        console.log('Editor focused, starting to type...');
         
         // Type the essay character by character
         await typeText(editor, essay);
@@ -57,6 +66,7 @@ async function startTyping(essay) {
         }
         
     } catch (error) {
+        console.error('Error in startTyping:', error);
         sendError(error.message);
     } finally {
         isTyping = false;
@@ -64,23 +74,31 @@ async function startTyping(essay) {
 }
 
 function findGoogleDocsEditor() {
+    console.log('Searching for Google Docs editor...');
+    
     // Try multiple selectors for Google Docs editor
     const selectors = [
         '.docs-texteventtarget-iframe',
         '.kix-appview-editor',
         '[role="textbox"][contenteditable="true"]',
-        '.docs-gm'
+        '.docs-gm',
+        '.kix-cursor-caret',
+        '.kix-lineview-content'
     ];
     
     for (const selector of selectors) {
         const element = document.querySelector(selector);
         if (element) {
+            console.log('Found element with selector:', selector, element);
             // If it's an iframe, get the content document
             if (element.tagName === 'IFRAME') {
                 try {
                     const doc = element.contentDocument || element.contentWindow.document;
                     const textbox = doc.querySelector('[contenteditable="true"]') || doc.body;
-                    if (textbox) return textbox;
+                    if (textbox) {
+                        console.log('Found textbox inside iframe:', textbox);
+                        return textbox;
+                    }
                 } catch (e) {
                     console.log('Cannot access iframe:', e);
                 }
@@ -89,12 +107,21 @@ function findGoogleDocsEditor() {
         }
     }
     
+    // Try to find any contenteditable element
+    const contentEditables = document.querySelectorAll('[contenteditable="true"]');
+    console.log('Found contenteditable elements:', contentEditables.length);
+    if (contentEditables.length > 0) {
+        return contentEditables[0];
+    }
+    
     // Fallback: find any focused contenteditable element
     const focused = document.activeElement;
+    console.log('Active element:', focused);
     if (focused && focused.isContentEditable) {
         return focused;
     }
     
+    console.log('No editor found!');
     return null;
 }
 
@@ -205,10 +232,25 @@ function typeCharacter(element, char) {
     
     // Actually insert the text
     if (element.isContentEditable) {
-        const selection = window.getSelection();
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
+        // Get the window object that owns this element (might be in iframe)
+        const win = element.ownerDocument.defaultView || window;
+        const selection = win.getSelection();
+        
+        // Create a range if one doesn't exist
+        let range;
+        if (selection.rangeCount === 0) {
+            range = element.ownerDocument.createRange();
+            range.selectNodeContents(element);
+            range.collapse(false); // Collapse to end
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            range = selection.getRangeAt(0);
+        }
+        
+        // Insert the character
         const textNode = document.createTextNode(char);
+        range.deleteContents();
         range.insertNode(textNode);
         range.setStartAfter(textNode);
         range.setEndAfter(textNode);
@@ -245,12 +287,24 @@ function backspace(element) {
     
     // Delete the last character
     if (element.isContentEditable) {
-        const selection = window.getSelection();
+        // Get the window object that owns this element (might be in iframe)
+        const win = element.ownerDocument.defaultView || window;
+        const selection = win.getSelection();
+        
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             if (range.startOffset > 0) {
                 range.setStart(range.startContainer, range.startOffset - 1);
                 range.deleteContents();
+            } else if (range.startContainer.previousSibling) {
+                // If at start of current node, try to delete from previous node
+                const prevNode = range.startContainer.previousSibling;
+                if (prevNode.nodeType === Node.TEXT_NODE && prevNode.length > 0) {
+                    const newRange = element.ownerDocument.createRange();
+                    newRange.setStart(prevNode, prevNode.length - 1);
+                    newRange.setEnd(prevNode, prevNode.length);
+                    newRange.deleteContents();
+                }
             }
         }
     } else {

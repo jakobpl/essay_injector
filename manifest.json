@@ -3,7 +3,7 @@
   "name": "Essay Injector",
   "version": "1.0.0",
   "description": "Simulate human typing in Google Docs to bypass AI detection",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://docs.google.com/*"],
   "action": {
     "default_popup": "popup.html",
