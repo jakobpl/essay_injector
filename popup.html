@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Essay Injector</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Essay Injector</h1>
+        <p class="description">Paste your essay below and click "Start Typing" to simulate natural human typing in Google Docs.</p>
+        
+        <textarea id="essayInput" placeholder="Paste your essay here..." rows="10"></textarea>
+        
+        <div class="controls">
+            <button id="startBtn">Start Typing</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+        
+        <div id="status" class="status hidden">
+            <div class="status-text" id="statusText">Ready</div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-info" id="progressInfo">0 / 0 characters</div>
+        </div>
+        
+        <div id="error" class="error hidden"></div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
+

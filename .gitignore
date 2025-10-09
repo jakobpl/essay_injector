@@ -1,0 +1,25 @@
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Chrome extension artifacts
+*.pem
+*.crx
+
+# Build files
+build/
+dist/
+
+# Node modules (if added later)
+node_modules/
+package-lock.json
+
