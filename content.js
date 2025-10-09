@@ -188,6 +188,12 @@ async function typeText(editor, text) {
 }
 
 function typeCharacter(element, char) {
+    // Handle newline characters specially
+    if (char === '\n') {
+        typeEnter(element);
+        return;
+    }
+    
     // Create and dispatch keyboard events
     const keydownEvent = new KeyboardEvent('keydown', {
         key: char,
@@ -259,6 +265,79 @@ function typeCharacter(element, char) {
     } else {
         element.value += char;
     }
+    
+    element.dispatchEvent(inputEvent);
+    element.dispatchEvent(keyupEvent);
+}
+
+function typeEnter(element) {
+    // Create Enter key events
+    const keydownEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+    });
+    
+    const keypressEvent = new KeyboardEvent('keypress', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+    });
+    
+    const keyupEvent = new KeyboardEvent('keyup', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+    });
+    
+    element.dispatchEvent(keydownEvent);
+    element.dispatchEvent(keypressEvent);
+    
+    // Insert line break
+    if (element.isContentEditable) {
+        // Get the window object that owns this element (might be in iframe)
+        const win = element.ownerDocument.defaultView || window;
+        const selection = win.getSelection();
+        
+        // Create a range if one doesn't exist
+        let range;
+        if (selection.rangeCount === 0) {
+            range = element.ownerDocument.createRange();
+            range.selectNodeContents(element);
+            range.collapse(false); // Collapse to end
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            range = selection.getRangeAt(0);
+        }
+        
+        // Insert a line break (br element)
+        const br = element.ownerDocument.createElement('br');
+        range.deleteContents();
+        range.insertNode(br);
+        range.setStartAfter(br);
+        range.setEndAfter(br);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    } else {
+        element.value += '\n';
+    }
+    
+    const inputEvent = new InputEvent('input', {
+        data: null,
+        inputType: 'insertLineBreak',
+        bubbles: true,
+        cancelable: false
+    });
     
     element.dispatchEvent(inputEvent);
     element.dispatchEvent(keyupEvent);
