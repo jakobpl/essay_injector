@@ -48,13 +48,23 @@ const typos = {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Content script received message:', message.action);
+    
     if (message.action === 'startTyping') {
         startTyping(message.essay);
+        sendResponse({ received: true });
     } else if (message.action === 'stopTyping') {
         shouldStop = true;
         isTyping = false;
+        chrome.storage.local.set({ isCurrentlyTyping: false });
+        sendResponse({ received: true });
+    } else if (message.action === 'getStatus') {
+        // Return current typing status
+        sendResponse({ 
+            isTyping: isTyping,
+            received: true 
+        });
     }
-    sendResponse({ received: true });
+    
     return true; // Keep the message channel open
 });
 
@@ -64,6 +74,13 @@ async function startTyping(essay) {
     
     isTyping = true;
     shouldStop = false;
+    
+    // Store typing state and essay info
+    chrome.storage.local.set({ 
+        isCurrentlyTyping: true,
+        totalChars: essay.length,
+        currentProgress: 0
+    });
     
     try {
         // Find Google Docs editor
@@ -91,6 +108,7 @@ async function startTyping(essay) {
         sendError(error.message);
     } finally {
         isTyping = false;
+        chrome.storage.local.set({ isCurrentlyTyping: false });
     }
 }
 
@@ -474,10 +492,20 @@ function sleep(ms) {
 }
 
 function sendProgress(current, total) {
+    // Update storage for persistent state
+    chrome.storage.local.set({ 
+        currentProgress: current,
+        totalChars: total
+    });
+    
+    // Send message to popup (if it's open)
     chrome.runtime.sendMessage({
         action: 'typingProgress',
         current: current,
         total: total
+    }).catch(() => {
+        // Popup might be closed, that's okay
+        console.log('Progress update sent but popup may be closed');
     });
 }
 

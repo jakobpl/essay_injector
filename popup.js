@@ -11,12 +11,54 @@ const errorDiv = document.getElementById('error');
 
 let isTyping = false;
 
-// Load saved essay from storage
-chrome.storage.local.get(['savedEssay'], (result) => {
+// Load saved essay and check typing status when popup opens
+chrome.storage.local.get(['savedEssay', 'isCurrentlyTyping', 'currentProgress', 'totalChars'], (result) => {
     if (result.savedEssay) {
         essayInput.value = result.savedEssay;
     }
+    
+    // Check if typing is currently in progress
+    if (result.isCurrentlyTyping) {
+        console.log('Typing in progress detected, restoring UI state');
+        restoreTypingState(result.currentProgress || 0, result.totalChars || 0);
+    }
 });
+
+// Also query the content script directly to double-check status
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && tabs[0].url && tabs[0].url.includes('docs.google.com')) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: 'getStatus' }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.log('Could not query content script:', chrome.runtime.lastError);
+                return;
+            }
+            
+            if (response && response.isTyping) {
+                console.log('Content script confirms typing is in progress');
+                // Get the latest progress from storage
+                chrome.storage.local.get(['currentProgress', 'totalChars'], (result) => {
+                    restoreTypingState(result.currentProgress || 0, result.totalChars || 0);
+                });
+            }
+        });
+    }
+});
+
+function restoreTypingState(current, total) {
+    isTyping = true;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    essayInput.disabled = true;
+    statusDiv.classList.remove('hidden');
+    errorDiv.classList.add('hidden');
+    statusText.textContent = 'Typing...';
+    
+    if (total > 0) {
+        const percentage = (current / total) * 100;
+        progressBar.style.width = percentage + '%';
+        progressInfo.textContent = `${current} / ${total} characters`;
+    }
+}
 
 // Save essay to storage when changed
 essayInput.addEventListener('input', () => {
@@ -82,6 +124,7 @@ stopBtn.addEventListener('click', async () => {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         chrome.tabs.sendMessage(tab.id, { action: 'stopTyping' });
+        chrome.storage.local.set({ isCurrentlyTyping: false, currentProgress: 0 });
         resetUI();
         statusText.textContent = 'Stopped';
     } catch (error) {
@@ -98,9 +141,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         progressInfo.textContent = `${current} / ${total} characters`;
     } else if (message.action === 'typingComplete') {
         statusText.textContent = 'Complete!';
+        chrome.storage.local.set({ isCurrentlyTyping: false, currentProgress: 0 });
         resetUI();
     } else if (message.action === 'typingError') {
         showError('Error: ' + message.error);
+        chrome.storage.local.set({ isCurrentlyTyping: false, currentProgress: 0 });
         resetUI();
     }
 });
