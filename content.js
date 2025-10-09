@@ -5,6 +5,27 @@ console.log('Essay Injector content script loaded on:', window.location.href);
 let isTyping = false;
 let shouldStop = false;
 
+// Typing speed configuration (in milliseconds)
+const TYPING_DELAYS = {
+    // Regular character delays
+    normal: { min: 40, max: 180 },
+    
+    // Pause after comma
+    afterComma: { min: 150, max: 350 },
+    
+    // Pause after period (end of sentence)
+    afterPeriod: { min: 300, max: 600 },
+    
+    // Pause after exclamation or question mark
+    afterSentenceEnd: { min: 300, max: 600 },
+    
+    // Pause after newline (new paragraph)
+    afterNewline: { min: 400, max: 800 },
+    
+    // Occasional longer pause (thinking pause)
+    thinkingPause: { min: 500, max: 1200 }
+};
+
 // Common typos for realistic simulation
 const typos = {
     'the': 'teh',
@@ -128,9 +149,11 @@ function findGoogleDocsEditor() {
 async function typeText(editor, text) {
     let currentIndex = 0;
     const totalChars = text.length;
+    let charsSinceLastPause = 0;
     
     while (currentIndex < text.length && !shouldStop) {
         const char = text[currentIndex];
+        const prevChar = currentIndex > 0 ? text[currentIndex - 1] : '';
         
         // Check if we should introduce a typo (5% chance)
         const shouldMakeTypo = Math.random() < 0.05;
@@ -147,7 +170,7 @@ async function typeText(editor, text) {
                         await typeCharacter(editor, wrong[i]);
                         currentIndex++;
                         sendProgress(currentIndex, totalChars);
-                        await sleep(randomDelay());
+                        await sleep(getDelayForCharacter(wrong[i]));
                         if (shouldStop) return;
                     }
                     
@@ -166,12 +189,13 @@ async function typeText(editor, text) {
                         await typeCharacter(editor, correct[i]);
                         currentIndex++;
                         sendProgress(currentIndex, totalChars);
-                        await sleep(randomDelay());
+                        await sleep(getDelayForCharacter(correct[i]));
                         if (shouldStop) return;
                     }
                     
                     // Skip ahead since we've already typed this word
                     currentIndex--; // Will be incremented at end of loop
+                    charsSinceLastPause = 0;
                     continue;
                 }
             }
@@ -181,10 +205,44 @@ async function typeText(editor, text) {
         await typeCharacter(editor, char);
         currentIndex++;
         sendProgress(currentIndex, totalChars);
+        charsSinceLastPause++;
         
-        // Random delay between characters (50-200ms)
-        await sleep(randomDelay());
+        // Determine delay based on what was just typed
+        let delay = getDelayForCharacter(char);
+        
+        // Occasionally add a random "thinking pause" (1% chance, but not too often)
+        if (Math.random() < 0.01 && charsSinceLastPause > 20) {
+            delay = randomDelay(TYPING_DELAYS.thinkingPause.min, TYPING_DELAYS.thinkingPause.max);
+            charsSinceLastPause = 0;
+        }
+        
+        await sleep(delay);
     }
+}
+
+function getDelayForCharacter(char) {
+    // Longer pause after newline (paragraph break)
+    if (char === '\n') {
+        return randomDelay(TYPING_DELAYS.afterNewline.min, TYPING_DELAYS.afterNewline.max);
+    }
+    
+    // Pause after period, exclamation, or question mark (end of sentence)
+    if (char === '.' || char === '!' || char === '?') {
+        return randomDelay(TYPING_DELAYS.afterPeriod.min, TYPING_DELAYS.afterPeriod.max);
+    }
+    
+    // Shorter pause after comma
+    if (char === ',') {
+        return randomDelay(TYPING_DELAYS.afterComma.min, TYPING_DELAYS.afterComma.max);
+    }
+    
+    // Slightly longer pause after semicolon or colon
+    if (char === ';' || char === ':') {
+        return randomDelay(TYPING_DELAYS.afterComma.min, TYPING_DELAYS.afterComma.max);
+    }
+    
+    // Normal typing speed with more variation
+    return randomDelay(TYPING_DELAYS.normal.min, TYPING_DELAYS.normal.max);
 }
 
 function typeCharacter(element, char) {
