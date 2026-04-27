@@ -24,22 +24,18 @@ chrome.storage.local.get(['savedEssay', 'isCurrentlyTyping', 'currentProgress', 
     }
 });
 
-// Also query the content script directly to double-check status
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0] && tabs[0].url && tabs[0].url.includes('docs.google.com')) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'getStatus' }, (response) => {
-            if (chrome.runtime.lastError) {
-                console.log('Could not query content script:', chrome.runtime.lastError);
-                return;
-            }
-            
-            if (response && response.isTyping) {
-                console.log('Content script confirms typing is in progress');
-                // Get the latest progress from storage
-                chrome.storage.local.get(['currentProgress', 'totalChars'], (result) => {
-                    restoreTypingState(result.currentProgress || 0, result.totalChars || 0);
-                });
-            }
+// Also query the background script directly to double-check status
+chrome.runtime.sendMessage({ action: 'getStatus' }, (response) => {
+    if (chrome.runtime.lastError) {
+        console.log('Could not query background script:', chrome.runtime.lastError);
+        return;
+    }
+    
+    if (response && response.isTyping) {
+        console.log('Background script confirms typing is in progress');
+        // Get the latest progress from storage
+        chrome.storage.local.get(['currentProgress', 'totalChars'], (result) => {
+            restoreTypingState(result.currentProgress || 0, result.totalChars || 0);
         });
     }
 });
@@ -98,16 +94,17 @@ startBtn.addEventListener('click', async () => {
         progressBar.style.width = '0%';
         progressInfo.textContent = `0 / ${essay.length} characters`;
         
-        // Send message to content script
-        console.log('Sending message to tab:', tab.id);
-        chrome.tabs.sendMessage(tab.id, {
+        // Send message to background script
+        console.log('Sending message to background script for tab:', tab.id);
+        chrome.runtime.sendMessage({
             action: 'startTyping',
-            essay: essay
+            essay: essay,
+            tabId: tab.id
         }, (response) => {
-            console.log('Response from content script:', response);
+            console.log('Response from background script:', response);
             if (chrome.runtime.lastError) {
                 console.error('Error sending message:', chrome.runtime.lastError);
-                showError('Could not connect to page. Try refreshing the Google Docs page.');
+                showError('Could not start typing. Try refreshing the page.');
                 resetUI();
             }
         });
@@ -120,10 +117,9 @@ startBtn.addEventListener('click', async () => {
 });
 
 // Stop typing
-stopBtn.addEventListener('click', async () => {
+stopBtn.addEventListener('click', () => {
     try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        chrome.tabs.sendMessage(tab.id, { action: 'stopTyping' });
+        chrome.runtime.sendMessage({ action: 'stopTyping' });
         chrome.storage.local.set({ isCurrentlyTyping: false, currentProgress: 0 });
         resetUI();
         statusText.textContent = 'Stopped';
@@ -161,4 +157,3 @@ function resetUI() {
     stopBtn.disabled = true;
     essayInput.disabled = false;
 }
-
